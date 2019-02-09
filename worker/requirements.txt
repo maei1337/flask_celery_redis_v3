@@ -1,2 +1,5 @@
 celery
 redis
+requests
+flask
+python-dotenv

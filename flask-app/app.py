@@ -13,12 +13,16 @@ app = Flask(__name__)
 api = Api(app)
 
 class add_zahl(Resource):
-    def post(self, zahl):
-        b = 10
-        task = celery.send_task('mytasks.add', args=[zahl, b])
+    def post(self):
+        msg = "Hallo ich bin ein Text"
+        sub = "Test 1337"
+        email = "eiletz@oecg.de"
+
+        task = celery.send_task('mytasks.add', args=[msg, sub, email])
+
         return {'message': 'Prozess {} gestartet'.format(task.id)}, 200
 
-api.add_resource(add_zahl, "/add/<int:zahl>")
+api.add_resource(add_zahl, "/add")
 
 if __name__ == '__main__':
     app.run(host="0.0.0.0", debug=True)
