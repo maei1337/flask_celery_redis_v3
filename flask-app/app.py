@@ -14,7 +14,8 @@ api = Api(app)
 
 class add_zahl(Resource):
     def post(self, zahl):
-        task = celery.send_task('mytasks.add', args=[zahl])
+        b = 10
+        task = celery.send_task('mytasks.add', args=[zahl, b])
         return {'message': 'Prozess {} gestartet'.format(task.id)}, 200
 
 api.add_resource(add_zahl, "/add/<int:zahl>")

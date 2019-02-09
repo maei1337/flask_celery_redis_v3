@@ -8,6 +8,6 @@ celery = Celery(
 )
 
 @celery.task(name='mytasks.add')
-def add(zahl):
+def add(zahl, b):
     time.sleep(5)
-    return zahl + zahl
+    return zahl + b
