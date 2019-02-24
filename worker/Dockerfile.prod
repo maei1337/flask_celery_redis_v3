@@ -1,0 +1,174 @@
+gunicorn -b 0.0.0.0:8080 --name app --reload tasks:app &
+
+FROM python:3.6-slim
+
+RUN mkdir /worker
+COPY requirements.txt /worker/
+RUN pip install --no-cache-dir -r /worker/requirements.txt
+RUN pip install gunicorn
+
+COPY . /worker/
+RUN chmod +x /worker/start.sh
+COPY celeryd /etc/init.d/celeryd
+RUN chmod +x /etc/init.d/celeryd
+
+COPY celeryd.conf /etc/default/celeryd
+RUN chown -R root:root /etc/default/celeryd
+
+RUN useradd -u 823 -N -M --system -s /bin/bash celery
+RUN addgroup celery
+RUN adduser celery celery
+
+RUN mkdir -p /var/run/celery
+RUN mkdir -p /var/log/celery
+RUN chown -R celery:celery /var/run/celery
+RUN chown -R celery:celery /var/log/celery
+
+CMD ["/worker/start.sh"]
+
+basedir = os.path.abspath(os.path.dirname(__file__))
+load_dotenv(os.path.join(basedir, '.env'))
+
+worker2:
+  restart: always
+  build:
+    context: ./worker
+    dockerfile: Dockerfile
+  environment:
+    - C_FORCE_ROOT=true
+  environment:
+    - TASK_QUEUE=queue2
+  depends_on:
+    - redis
+
+
+#!/bin/bash
+
+command: celery worker --app=worker.worker.celery --hostname=worker.queue2@%h --queues=queue2 --uid=823 --loglevel=INFO
+
+
+celery.conf.update({
+    'imports': (
+        'tasks',
+    ),
+    'task_routes': {
+        'mytasks.add': {'queue': 'queue1'},
+        'mytasks.sub': {'queue': 'queue2'}
+        }
+})
+
+exec celery worker --app=worker.worker.celery --hostname=worker.queue1@%h --queues=queue1 --uid=823 --loglevel=INFO &
+  celery worker --app=worker.worker.celery --hostname=worker.queue2@%h --queues=queue2 --uid=823 --loglevel=INFO
+
+CMD ["/worker/start.sh"]
+
+CELERY_ROUTES = {
+    'imports': (
+        'tasks',
+        ),
+   'task_routes': {
+       'mytasks.add': {'queue': 'queue1'},
+       'mytasks.sub': {'queue': 'queue2'}
+   },
+   'task_serializer': 'json',
+   'result_serializer': 'json',
+   'accept_content': ['json']
+}
+
+'mytasks.add': {
+    'exchange': 'worker',
+    'exchange_type': 'direct',
+    'routing_key': 'worker',
+    'queue': 'queue1'
+},
+'mytasks.sub': {
+    'exchange': 'worker',
+    'exchange_type': 'direct',
+    'routing_key': 'worker',
+    'queue': 'queue2'
+}
+
+
+exec celery worker -A --app=worker.worker.celery --hostname=worker.queue1 --queues=queue1 --uid=823 --loglevel=INFO &
+  celery worker -A --app=worker.worker.celery --hostname=worker.queue2 --queues=queue2 --uid=823 --loglevel=INFO
+
+
+CMD ["celery", "worker", "--app=worker.worker.celery", "--queues=queue1", "--uid=823" ,"--loglevel=INFO"]
+#!/bin/bash
+set -e
+exec celery multi start worker1 -A worker.tasks worker -l info
+
+exec celery -A worker.tasks worker -l info
+
+
+celery multi start worker1 -A worker --app=worker.tasks:celery
+
+
+CMD ["celery", "worker", "--app=worker.tasks.celery", "--loglevel=INFO"]
+
+
+#!/bin/sh
+exec celery multi start worker1 -A worker --app=worker.tasks:celery
+
+FROM python:3.6-slim
+
+RUN mkdir /worker
+COPY requirements.txt /worker/
+RUN pip install --no-cache-dir -r /worker/requirements.txt
+
+COPY celeryd /etc/init.d/celeryd
+COPY /1/celeryd /etc/default/celeryd
+
+COPY . /worker/
+
+# create celery user
+RUN useradd -N -M --system -s /bin/bash celery && echo celery:"B1llyB0n3s" | /usr/sbin/chpasswd
+# celery perms
+RUN groupadd grp_celery && usermod -a -G grp_celery celery && mkdir -p /var/run/celery/ /var/log/celery/
+RUN chown -R celery:grp_celery /var/run/celery/ /var/log/celery/ /worker/
+
+RUN chmod +x /etc/init.d/celeryd
+RUN chmod 640 /etc/default/celeryd
+
+RUN chmod u+x /worker/start.sh
+ENTRYPOINT /worker/start.sh
+
+
+
+------
+FROM python:3.6-slim
+
+RUN mkdir /usr/src/app
+COPY requirements.txt /usr/src/app/
+RUN pip install --no-cache-dir -r /usr/src/app/requirements.txt
+
+COPY celeryd /etc/init.d/celeryd
+COPY celeryd.conf /etc/default/celeryd.conf
+
+COPY . /usr/src/app/
+
+# create celery user
+RUN useradd -N -M --system -s /bin/bash celery && echo celery:"B1llyB0n3s" | /usr/sbin/chpasswd
+# celery perms
+RUN groupadd grp_celery && usermod -a -G grp_celery celery && mkdir -p /var/run/celery/ /var/log/celery/
+RUN chown -R celery:grp_celery /var/run/celery/ /var/log/celery/
+
+RUN chmod +x /etc/init.d/celeryd
+RUN chmod 640 /etc/default/celeryd.conf
+
+RUN chmod u+x /usr/src/app/start.sh
+ENTRYPOINT /usr/src/app/start.sh
+
+
+
+
+
+RUN groupadd -g 61000 celery
+RUN useradd -g 61000 celery -s /bin/bash
+USER celery
+
+
+ENTRYPOINT celery multi start worker1 \
+    -A worker --app=worker.tasks:celery\
+    --pidfile="$HOME/run/celery/%n.pid" \
+    --logfile="$HOME/log/celery/%n%I.log"
