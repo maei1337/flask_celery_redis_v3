@@ -13,10 +13,10 @@ services:
     depends_on:
       - redis
 
-  worker:
+  auth-worker:
     restart: always
     build:
-      context: ./worker
+      context: ./auth-worker
       dockerfile: Dockerfile
     environment:
       - C_FORCE_ROOT=true

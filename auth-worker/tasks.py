@@ -1,11 +1,8 @@
-from flask import Flask
 from celery import Celery
 import time
 import sys
 
-app = Flask(__name__)
-
-sys.path.append('/worker')
+sys.path.append('/code')
 
 import celeryconfig
 celery = Celery('tasks')
@@ -23,6 +20,3 @@ def sub(zahl):
     time.sleep(5)
     result = 999 * zahl
     return result
-
-if __name__ == '__main__':
-    app.run()
